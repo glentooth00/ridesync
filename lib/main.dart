@@ -1,13 +1,20 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'screens/garage_screen.dart';
 import 'screens/register_motorcycle_screen.dart';
 import 'screens/register_user_screen.dart';
 import 'services/app_storage.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Keep RideSync in portrait orientation.
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
+
   runApp(const RideSyncApp());
 }
 
@@ -53,15 +60,31 @@ class StartupScreen extends StatefulWidget {
 }
 
 class _StartupScreenState extends State<StartupScreen> {
+  late Future<Widget> _initialScreenFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialScreenFuture = _getInitialScreen();
+  }
+
+  Future<void> _retry() async {
+    setState(() {
+      _initialScreenFuture = _getInitialScreen();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: _getInitialScreen(),
+    return FutureBuilder<Widget>(
+      future: _initialScreenFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
             body: Center(
-              child: CircularProgressIndicator(),
+              child: CircularProgressIndicator(
+                color: Color(0xFFFF6B35),
+              ),
             ),
           );
         }
@@ -69,22 +92,34 @@ class _StartupScreenState extends State<StartupScreen> {
         if (snapshot.hasError) {
           return Scaffold(
             body: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Unable to load RideSync data.'),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: () => setState(() {}),
-                    child: const Text('RETRY'),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Color(0xFFFF6B35),
+                      size: 48,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Unable to load RideSync data.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _retry,
+                      child: const Text('RETRY'),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
         }
 
-        return snapshot.data!;
+        return snapshot.data ?? const GarageScreen();
       },
     );
   }

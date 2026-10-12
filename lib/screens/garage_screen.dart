@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/motorcycle.dart';
 import '../models/user_profile.dart';
 import '../services/app_storage.dart';
+import 'odometer_screen.dart';
 import 'register_motorcycle_screen.dart';
 
 class GarageScreen extends StatefulWidget {
@@ -19,7 +20,9 @@ class _GarageScreenState extends State<GarageScreen> {
   String? _activeId;
   bool _loading = true;
 
-  static const orange = Color(0xFFFF6B35);
+  static const Color orange = Color(0xFFFF6B35);
+  static const Color background = Color(0xFF101114);
+  static const Color panel = Color(0xFF1B1D22);
 
   @override
   void initState() {
@@ -28,28 +31,57 @@ class _GarageScreenState extends State<GarageScreen> {
   }
 
   Future<void> _loadGarage() async {
-    final results = await Future.wait([
-      AppStorage.loadUser(),
-      AppStorage.loadMotorcycles(),
-      AppStorage.loadActiveMotorcycleId(),
-    ]);
+    try {
+      final results = await Future.wait([
+        AppStorage.loadUser(),
+        AppStorage.loadMotorcycles(),
+        AppStorage.loadActiveMotorcycleId(),
+      ]);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _user = results[0] as UserProfile?;
-      _motorcycles = results[1] as List<Motorcycle>;
-      _activeId = results[2] as String?;
-      _loading = false;
-    });
+      setState(() {
+        _user = results[0] as UserProfile?;
+        _motorcycles = results[1] as List<Motorcycle>;
+        _activeId = results[2] as String?;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() => _loading = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to load your garage. Please try again.'),
+        ),
+      );
+    }
   }
 
   Future<void> _selectMotorcycle(Motorcycle motorcycle) async {
-    await AppStorage.setActiveMotorcycle(motorcycle.id);
+    try {
+      await AppStorage.setActiveMotorcycle(motorcycle.id);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() => _activeId = motorcycle.id);
+      setState(() => _activeId = motorcycle.id);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${motorcycle.displayName} selected.'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to select this motorcycle.'),
+        ),
+      );
+    }
   }
 
   Future<void> _addMotorcycle() async {
@@ -59,32 +91,67 @@ class _GarageScreenState extends State<GarageScreen> {
       ),
     );
 
-    if (mounted) await _loadGarage();
+    if (mounted) {
+      await _loadGarage();
+    }
+  }
+
+  void _openOdometer(Motorcycle motorcycle) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OdometerScreen(motorcycle: motorcycle),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final activeBike = _motorcycles.where(
-      (bike) => bike.id == _activeId,
-    ).firstOrNull;
+    final matchingBikes = _motorcycles
+        .where((bike) => bike.id == _activeId)
+        .toList();
+
+    final Motorcycle? activeBike =
+        matchingBikes.isEmpty ? null : matchingBikes.first;
 
     return Scaffold(
+      backgroundColor: background,
       appBar: AppBar(
-        title: const Text(
-          'RideSync',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        backgroundColor: background,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: const Row(
+          children: [
+            Icon(
+              Icons.two_wheeler,
+              color: orange,
+              size: 28,
+            ),
+            SizedBox(width: 10),
+            Text(
+              'RideSync',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
         ),
         actions: [
           IconButton(
             onPressed: _addMotorcycle,
             tooltip: 'Add motorcycle',
-            icon: const Icon(Icons.add),
+            icon: const Icon(Icons.add_circle_outline),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: orange),
+            )
           : RefreshIndicator(
+              color: orange,
+              backgroundColor: panel,
               onRefresh: _loadGarage,
               child: ListView(
                 padding: const EdgeInsets.all(20),
@@ -93,29 +160,36 @@ class _GarageScreenState extends State<GarageScreen> {
                     'Welcome, ${_user?.name ?? 'Rider'}',
                     style: const TextStyle(
                       fontSize: 25,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Your motorcycles, all in one place.',
-                    style: TextStyle(color: Colors.white60),
+                    'Your ride. Your data.',
+                    style: TextStyle(
+                      color: Colors.white60,
+                      fontSize: 14,
+                    ),
                   ),
                   const SizedBox(height: 28),
+
                   if (activeBike != null) ...[
                     const Text(
                       'ACTIVE MOTORCYCLE',
                       style: TextStyle(
                         color: orange,
                         fontSize: 11,
-                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.8,
                       ),
                     ),
                     const SizedBox(height: 12),
+
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1B1D22),
+                        color: panel,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: orange.withValues(alpha: 0.5),
@@ -124,28 +198,66 @@ class _GarageScreenState extends State<GarageScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(
-                            Icons.two_wheeler,
-                            color: orange,
-                            size: 40,
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: orange.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: const Icon(
+                                  Icons.two_wheeler,
+                                  color: orange,
+                                  size: 34,
+                                ),
+                              ),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: orange.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Text(
+                                  'ACTIVE',
+                                  style: TextStyle(
+                                    color: orange,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 18),
+
                           Text(
                             activeBike.nickname.isEmpty
                                 ? activeBike.displayName
                                 : activeBike.nickname,
                             style: const TextStyle(
                               fontSize: 23,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
                             ),
                           ),
+                          const SizedBox(height: 5),
                           Text(
                             activeBike.displayName,
                             style: const TextStyle(
                               color: Colors.white60,
+                              fontSize: 14,
                             ),
                           ),
-                          const SizedBox(height: 18),
+
+                          const SizedBox(height: 22),
+
                           Row(
                             children: [
                               Expanded(
@@ -160,23 +272,80 @@ class _GarageScreenState extends State<GarageScreen> {
                                   activeBike.year?.toString() ?? 'Not set',
                                 ),
                               ),
+                              Expanded(
+                                child: _detail(
+                                  'TYPE',
+                                  activeBike.type,
+                                ),
+                              ),
                             ],
                           ),
-                          const SizedBox(height: 18),
+
+                          const SizedBox(height: 24),
+
                           SizedBox(
                             width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'The live ride dashboard is our next step.',
-                                    ),
-                                  ),
-                                );
-                              },
+                            height: 54,
+                            child: ElevatedButton.icon(
+                              onPressed: () => _openOdometer(activeBike),
                               icon: const Icon(Icons.speed),
-                              label: const Text('OPEN RIDE DASHBOARD'),
+                              label: const Text(
+                                'OPEN RIDE DASHBOARD',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: orange,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        color: panel,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Column(
+                        children: [
+                          const Icon(
+                            Icons.two_wheeler,
+                            color: orange,
+                            size: 48,
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'No active motorcycle',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Add a motorcycle to access your ride dashboard.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white60),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: _addMotorcycle,
+                            icon: const Icon(Icons.add),
+                            label: const Text('ADD MOTORCYCLE'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: orange,
+                              foregroundColor: Colors.white,
                             ),
                           ),
                         ],
@@ -184,6 +353,7 @@ class _GarageScreenState extends State<GarageScreen> {
                     ),
                     const SizedBox(height: 30),
                   ],
+
                   Row(
                     children: [
                       const Expanded(
@@ -191,8 +361,9 @@ class _GarageScreenState extends State<GarageScreen> {
                           'MY GARAGE',
                           style: TextStyle(
                             fontSize: 15,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w900,
                             letterSpacing: 1.5,
+                            color: Colors.white,
                           ),
                         ),
                       ),
@@ -205,21 +376,38 @@ class _GarageScreenState extends State<GarageScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
+
                   if (_motorcycles.isEmpty)
                     const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 32),
+                      padding: EdgeInsets.symmetric(vertical: 28),
                       child: Center(
-                        child: Text('No motorcycles registered yet.'),
+                        child: Text(
+                          'No motorcycles registered yet.',
+                          style: TextStyle(color: Colors.white60),
+                        ),
                       ),
                     ),
+
                   ..._motorcycles.map((bike) {
                     final isActive = bike.id == _activeId;
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 10),
-                      color: const Color(0xFF1B1D22),
+                      color: panel,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(
+                          color: isActive
+                              ? orange.withValues(alpha: 0.5)
+                              : Colors.white.withValues(alpha: 0.05),
+                        ),
+                      ),
                       child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 6,
+                        ),
                         leading: const CircleAvatar(
                           backgroundColor: Color(0xFF30231F),
                           child: Icon(
@@ -232,28 +420,48 @@ class _GarageScreenState extends State<GarageScreen> {
                               ? bike.displayName
                               : bike.nickname,
                           style: const TextStyle(
+                            color: Colors.white,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         subtitle: Text(
                           '${bike.displayName} • ${bike.odometerKm} km',
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
                         ),
                         trailing: isActive
                             ? const Icon(
                                 Icons.check_circle,
                                 color: orange,
                               )
-                            : const Icon(Icons.radio_button_unchecked),
+                            : const Icon(
+                                Icons.radio_button_unchecked,
+                                color: Colors.white38,
+                              ),
                         onTap: () => _selectMotorcycle(bike),
                       ),
                     );
                   }),
+
                   const SizedBox(height: 12),
+
                   OutlinedButton.icon(
                     onPressed: _addMotorcycle,
                     icon: const Icon(Icons.add),
                     label: const Text('ADD ANOTHER MOTORCYCLE'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: orange,
+                      side: const BorderSide(color: orange),
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
+
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -272,13 +480,15 @@ class _GarageScreenState extends State<GarageScreen> {
             letterSpacing: 1,
           ),
         ),
-        const SizedBox(height: 5),
+        const SizedBox(height: 6),
         Text(
           value,
           style: const TextStyle(
-            fontSize: 16,
+            color: Colors.white,
+            fontSize: 14,
             fontWeight: FontWeight.bold,
           ),
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
